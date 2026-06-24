@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>保険営業サポートAI | AVANTIS</title>
+  <style>
+    :root {
+      --navy: #0f2b4c; --navy2: #1a4a7a;
+      --orange: #f4721e;
+      --bg: #f5f7fa; --white: #fff;
+      --text: #1a1a2e; --text2: #666677;
+      --border: #dde3ef; --green: #2e7d32; --red: #e53935;
+      --radius: 18px; --shadow: 0 4px 24px rgba(15,43,76,.10);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Hiragino Kaku Gothic ProN','Hiragino Sans','Meiryo',sans-serif;
+      background: var(--bg); color: var(--text);
+      height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* ── Header ── */
+    .hdr {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--navy2) 100%);
+      color: #fff; padding: 12px 16px;
+      display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.18); flex-shrink: 0;
+    }
+    .hdr-icon {
+      width: 38px; height: 38px; background: var(--orange); border-radius: 10px;
+      display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0;
+    }
+    .hdr-title { font-size: 15px; font-weight: 700; }
+    .hdr-sub   { font-size: 10px; opacity: .7; margin-top: 2px; }
+    .hdr-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    #lastUpdatedBadge {
+      font-size: 10px; opacity: .65; white-space: nowrap;
+    }
+    .hdr-btn {
+      background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3);
+      color: #fff; border-radius: 20px; padding: 5px 11px;
+      font-size: 12px; font-family: inherit; font-weight: 600; cursor: pointer;
+      transition: background .2s; white-space: nowrap;
+    }
+    .hdr-btn:hover { background: rgba(255,255,255,.3); }
+
+    /* ── Chat ── */
+    .chat-wrap {
+      flex: 1; overflow-y: auto; padding: 14px;
+      display: flex; flex-direction: column; gap: 11px; scroll-behavior: smooth;
+    }
+    .bubble {
+      max-width: 82%; padding: 11px 15px; border-radius: var(--radius);
+      line-height: 1.65; font-size: 14px; word-break: break-word;
+      animation: fadeIn .22s ease;
+    }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+    .bubble-ai {
+      background: var(--white); border: 1px solid var(--border);
+      border-bottom-left-radius: 4px; box-shadow: var(--shadow); align-self: flex-start;
+    }
+    .bubble-ai .sender {
+      font-size: 11px; font-weight: 700; color: var(--navy); margin-bottom: 5px;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .bubble-ai .sender::before {
+      content:''; display:inline-block; width:7px; height:7px;
+      background: var(--orange); border-radius: 50%;
+    }
+    .bubble-user {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--navy2) 100%);
+      color: #fff; border-bottom-right-radius: 4px; align-self: flex-end;
+    }
+    .typing-indicator { display:flex; gap:5px; align-items:center; padding:12px 16px; }
+    .typing-indicator span {
+      width:7px; height:7px; background: var(--orange); border-radius:50%;
+      animation: bounce 1.2s infinite;
+    }
+    .typing-indicator span:nth-child(2){animation-delay:.2s}
+    .typing-indicator span:nth-child(3){animation-delay:.4s}
+    @keyframes bounce{0%,80%,100%{transform:translateY(0);opacity:.5}40%{transform:translateY(-7px);opacity:1}}
+
+    /* ── Input area ── */
+    .input-area {
+      background: var(--white); border-top: 1px solid var(--border);
+      padding: 10px 14px 14px; flex-shrink: 0;
+      box-shadow: 0 -2px 12px rgba(15,43,76,.06);
+    }
+    .status-bar { min-height:18px; font-size:12px; color:var(--orange); font-weight:600; margin-bottom:7px; text-align:center; }
+    .input-row { display:flex; gap:7px; align-items:center; }
+    #inputField {
+      flex:1; border:1.5px solid var(--border); border-radius:24px;
+      padding:9px 15px; font-size:14px; font-family:inherit; outline:none;
+      transition:border-color .2s; background:var(--bg);
+    }
+    #inputField:focus { border-color:var(--navy2); background:var(--white); }
+    #inputField::placeholder { color:#aab; }
+    #inputField:disabled { opacity:.5; }
+    .btn {
+      border:none; border-radius:24px; cursor:pointer;
+      font-family:inherit; font-weight:700; transition:all .2s; flex-shrink:0;
+    }
+    .btn:disabled { opacity:.4; cursor:not-allowed; }
+    #sendBtn {
+      background:var(--navy); color:#fff; padding:9px 16px; font-size:13px;
+    }
+    #sendBtn:hover:not(:disabled) { background:var(--navy2); }
+    #micBtn {
+      width:46px; height:46px; background:var(--bg); border:2px solid var(--border);
+      font-size:21px; display:flex; align-items:center; justify-content:center; border-radius:50%;
+    }
+    #micBtn:hover:not(:disabled) { border-color:var(--orange); background:#fff5ef; }
+    #micBtn.recording { background:var(--red); border-color:var(--red); animation:pulse 1.2s infinite; }
+    @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(229,57,53,.5)}50%{box-shadow:0 0 0 13px rgba(229,57,53,0)}}
+    .hint { text-align:center; font-size:11px; color:var(--text2); margin-top:7px; }
+    .hint kbd { background:var(--bg); border:1px solid var(--border); border-radius:3px; padding:1px 4px; font-size:10px; }
+    #voiceNote { font-size:12px; color:var(--text2); text-align:center; margin-top:5px; }
+
+    /* ── Toast ── */
+    #toast {
+      position:fixed; bottom:76px; left:50%; transform:translateX(-50%) translateY(16px);
+      background:var(--navy); color:#fff; padding:9px 18px; border-radius:24px;
+      font-size:13px; max-width:90vw; text-align:center;
+      opacity:0; pointer-events:none; transition:opacity .3s,transform .3s; z-index:999;
+      box-shadow:0 4px 20px rgba(0,0,0,.2);
+    }
+    #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+    #toast.ok  { background:var(--green); }
+    #toast.err { background:#c62828; }
+
+    /* ── API-key modal ── */
+    .modal-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,.55);
+      display:flex; align-items:center; justify-content:center;
+      z-index:1000; padding:16px;
+    }
+    .modal-overlay.hidden { display:none; }
+    .modal {
+      background:#fff; border-radius:20px; padding:28px 24px;
+      width:100%; max-width:400px; box-shadow:0 8px 40px rgba(0,0,0,.2);
+    }
+    .modal h2 { font-size:17px; color:var(--navy); margin-bottom:8px; }
+    .modal p  { font-size:13px; color:var(--text2); line-height:1.6; margin-bottom:16px; }
+    .modal input[type=text], .modal input[type=password] {
+      width:100%; border:1.5px solid var(--border); border-radius:12px;
+      padding:10px 14px; font-size:14px; font-family:inherit; outline:none;
+      margin-bottom:14px; transition:border-color .2s;
+    }
+    .modal input:focus { border-color:var(--navy2); }
+    .modal-link { font-size:12px; color:var(--navy2); }
+    .modal-link a { color:var(--navy2); }
+    .modal-actions { display:flex; gap:8px; margin-top:4px; }
+    .modal-btn {
+      flex:1; padding:11px; border-radius:12px; border:none;
+      font-family:inherit; font-size:14px; font-weight:700; cursor:pointer;
+    }
+    .modal-btn-primary { background:var(--navy); color:#fff; }
+    .modal-btn-primary:hover { background:var(--navy2); }
+    .modal-btn-secondary { background:var(--bg); color:var(--text2); }
+
+    /* scrollbar */
+    .chat-wrap::-webkit-scrollbar{width:4px}
+    .chat-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+  </style>
+</head>
+<body>
+
+<!-- API Key Modal -->
+<div class="modal-overlay" id="apiKeyModal">
+  <div class="modal">
+    <h2>🔑 APIキーを設定してください</h2>
+    <p>Anthropic の API キーを入力してください。キーはこのブラウザにのみ保存され、外部に送信されません。</p>
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="off" />
+    <div class="modal-link">
+      APIキーの取得: <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → API Keys
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn modal-btn-primary" onclick="saveApiKey()">保存して開始</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Header -->
+<div class="hdr">
+  <div class="hdr-icon">🛡️</div>
+  <div>
+    <div class="hdr-title">保険営業サポートAI</div>
+    <div class="hdr-sub">AVANTIS — 営業担当者専用</div>
+  </div>
+  <div class="hdr-right">
+    <span id="lastUpdatedBadge"></span>
+    <button class="hdr-btn" onclick="openApiKeyModal()" title="APIキーを変更">⚙️ 設定</button>
+  </div>
+</div>
+
+<!-- Chat -->
+<div class="chat-wrap" id="chatWrap"></div>
+
+<!-- Input -->
+<div class="input-area">
+  <div class="status-bar" id="statusBar"></div>
+  <div class="input-row">
+    <input type="text" id="inputField" placeholder="質問を入力、または🎤で音声入力" autocomplete="off" disabled />
+    <button class="btn" id="sendBtn" onclick="sendFromInput()" disabled>送信</button>
+    <button class="btn" id="micBtn" onclick="toggleMic()" title="音声入力 (Space)" disabled>🎤</button>
+  </div>
+  <div class="hint"><kbd>Space</kbd> キーでマイクのオン/オフ切替</div>
+  <div id="voiceNote"></div>
+</div>
+
+<script>
+// ─── Constants ────────────────────────────────────────────────
+const STORAGE_KEY   = 'avantis_anthropic_key';
+const MODEL         = 'claude-sonnet-4-6';
+const MAX_TOKENS    = 300;
+const MAX_HISTORY   = 10;
+const KNOWLEDGE_URL = 'knowledge/insurance_faq.json';
+
+// ─── State ────────────────────────────────────────────────────
+let conversationHistory = [];
+let systemPrompt        = '';
+let isRecording         = false;
+let isSpeaking          = false;
+let recognition         = null;
+let jpVoice             = null;
+
+// ─── DOM ──────────────────────────────────────────────────────
+const chatWrap      = document.getElementById('chatWrap');
+const inputField    = document.getElementById('inputField');
+const sendBtn       = document.getElementById('sendBtn');
+const micBtn        = document.getElementById('micBtn');
+const statusBar     = document.getElementById('statusBar');
+const voiceNote     = document.getElementById('voiceNote');
+const apiKeyModal   = document.getElementById('apiKeyModal');
+const apiKeyInput   = document.getElementById('apiKeyInput');
+const lastUpdBadge  = document.getElementById('lastUpdatedBadge');
+const toast         = document.getElementById('toast');
+
+// ─── API Key management ───────────────────────────────────────
+function getApiKey() { return localStorage.getItem(STORAGE_KEY) || ''; }
+
+function saveApiKey() {
+  const key = apiKeyInput.value.trim();
+  if (!key.startsWith('sk-ant-')) {
+    showToast('⚠️ APIキーは sk-ant- で始まります', 'err');
+    return;
+  }
+  localStorage.setItem(STORAGE_KEY, key);
+  apiKeyModal.classList.add('hidden');
+  enableUI();
+  showToast('✅ APIキーを保存しました', 'ok');
+}
+
+function openApiKeyModal() {
+  apiKeyInput.value = getApiKey();
+  apiKeyModal.classList.remove('hidden');
+  setTimeout(() => apiKeyInput.focus(), 50);
+}
+
+function enableUI() {
+  inputField.disabled = false;
+  sendBtn.disabled    = false;
+  if (recognition) micBtn.disabled = false;
+}
+
+// ─── Knowledge base ───────────────────────────────────────────
+async function loadKnowledge() {
+  try {
+    const res  = await fetch(KNOWLEDGE_URL + '?v=' + Date.now());
+    const data = await res.json();
+    systemPrompt = buildSystemPrompt(data);
+    const lu = data.last_updated || '不明';
+    lastUpdBadge.textContent = `知識更新: ${lu}`;
+    return true;
+  } catch (e) {
+    console.warn('knowledge load failed', e);
+    systemPrompt = FALLBACK_PROMPT;
+    lastUpdBadge.textContent = 'オフライン知識';
+    return false;
+  }
+}
+
+function buildSystemPrompt(data) {
+  let faq = '';
+  for (const cat of data.categories) {
+    faq += `\n## ${cat.name}\n`;
+    for (const item of cat.items) {
+      faq += `Q: ${item.question}\nA: ${item.answer}\n\n`;
+    }
+  }
+  return `あなたは保険営業担当者をサポートする専門 AI アシスタントです。
+営業担当者が顧客との商談中や移動中にハンズフリーで質問できるよう設計されています。
+知識ベース最終更新日: ${data.last_updated || '不明'}
+
+【回答ルール】
+- 回答は必ず 3 文以内に収めること（音声で聞き取りやすい長さ）
+- 数字・期間・金額は具体的に述べること
+- 不明・確認が必要な点は「確認が必要です」と正直に伝えること
+- 敬体（です・ます調）を使うこと
+- 箇条書きは使わず文章で回答すること（音声読み上げ対応）
+
+【保険知識データベース（最新）】
+${faq}
+【注意】データベースにない詳細は「詳細は約款または社内資料をご確認ください」と案内すること。`;
+}
+
+const FALLBACK_PROMPT = `あなたは保険営業担当者をサポートする AI アシスタントです。保険に関する質問に 3 文以内で簡潔に回答してください。`;
+
+// ─── Anthropic API ────────────────────────────────────────────
+async function callClaude(messages) {
+  const key = getApiKey();
+  if (!key) throw new Error('APIキーが設定されていません');
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-allow-browser': 'true',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
+      system: systemPrompt,
+      messages,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('APIキーが無効です。⚙️ 設定から確認してください。');
+    throw new Error(err.error?.message || `API エラー (${res.status})`);
+  }
+
+  const data = await res.json();
+  return data.content[0].text;
+}
+
+// ─── Chat logic ───────────────────────────────────────────────
+function setStatus(msg) { statusBar.textContent = msg; }
+
+function scrollBottom() { chatWrap.scrollTo({ top: chatWrap.scrollHeight, behavior: 'smooth' }); }
+
+function escape(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+function appendMessage(role, text) {
+  const el = document.createElement('div');
+  el.className = role === 'user' ? 'bubble bubble-user' : 'bubble bubble-ai';
+  el.innerHTML = role === 'assistant'
+    ? `<div class="sender">AVANTIS AI</div>${escape(text)}`
+    : escape(text);
+  chatWrap.appendChild(el);
+  scrollBottom();
+}
+
+function showTyping() {
+  const el = document.createElement('div');
+  el.id = 'typing'; el.className = 'bubble bubble-ai';
+  el.innerHTML = '<div class="sender">AVANTIS AI</div><div class="typing-indicator"><span></span><span></span><span></span></div>';
+  chatWrap.appendChild(el);
+  scrollBottom();
+}
+function removeTyping() { const el = document.getElementById('typing'); if (el) el.remove(); }
+
+function setLock(locked) {
+  inputField.disabled = locked;
+  sendBtn.disabled    = locked;
+  if (!locked && recognition) micBtn.disabled = false;
+}
+
+async function sendMessage(text) {
+  text = text.trim();
+  if (!text || !getApiKey()) return;
+
+  appendMessage('user', text);
+  conversationHistory.push({ role: 'user', content: text });
+  inputField.value = '';
+  setLock(true);
+  micBtn.disabled = true;
+  setStatus('AI が考えています...');
+  showTyping();
+
+  try {
+    const reply = await callClaude(conversationHistory);
+    removeTyping();
+    appendMessage('assistant', reply);
+    conversationHistory.push({ role: 'assistant', content: reply });
+    if (conversationHistory.length > MAX_HISTORY)
+      conversationHistory = conversationHistory.slice(-MAX_HISTORY);
+    setStatus('');
+    speak(reply);
+  } catch (e) {
+    removeTyping();
+    setStatus('');
+    appendMessage('assistant', `エラー: ${e.message}`);
+    if (e.message.includes('APIキー')) openApiKeyModal();
+  } finally {
+    setLock(false);
+    if (recognition) micBtn.disabled = false;
+  }
+}
+
+function sendFromInput() { sendMessage(inputField.value); }
+
+// ─── TTS ──────────────────────────────────────────────────────
+function loadVoices() {
+  const voices = window.speechSynthesis.getVoices();
+  jpVoice = voices.find(v => v.lang === 'ja-JP') || voices.find(v => v.lang.startsWith('ja')) || null;
+}
+if (window.speechSynthesis) { window.speechSynthesis.onvoiceschanged = loadVoices; loadVoices(); }
+
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ja-JP'; u.rate = 0.95; u.pitch = 1.0;
+  if (jpVoice) u.voice = jpVoice;
+  u.onstart = () => { isSpeaking = true; setStatus('音声を再生中...'); };
+  u.onend   = () => { isSpeaking = false; setStatus(''); };
+  u.onerror = () => { isSpeaking = false; setStatus(''); };
+  window.speechSynthesis.speak(u);
+}
+
+function stopSpeaking() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  isSpeaking = false; setStatus('');
+}
+
+// ─── STT ──────────────────────────────────────────────────────
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (!SpeechRecognition) {
+  micBtn.style.display = 'none';
+  voiceNote.textContent = '音声入力は Chrome / Edge で利用できます。テキスト入力をお使いください。';
+} else {
+  recognition = new SpeechRecognition();
+  recognition.lang = 'ja-JP';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+
+  recognition.onstart = () => {
+    isRecording = true;
+    micBtn.classList.add('recording');
+    micBtn.textContent = '⏹';
+    setStatus('音声認識中... 話しかけてください');
+  };
+  recognition.onresult = (e) => {
+    let t = '', final = false;
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      t += e.results[i][0].transcript;
+      if (e.results[i].isFinal) final = true;
+    }
+    inputField.value = t;
+    if (final) { stopRecognition(); sendMessage(t); }
+  };
+  recognition.onerror = (e) => {
+    const msgs = { 'not-allowed':'マイクの許可が必要です', 'no-speech':'音声が検出されませんでした' };
+    setStatus(msgs[e.error] || `音声認識エラー: ${e.error}`);
+    stopRecognition();
+  };
+  recognition.onend = () => { if (isRecording) stopRecognition(); };
+}
+
+function stopRecognition() {
+  isRecording = false;
+  micBtn.classList.remove('recording');
+  micBtn.textContent = '🎤';
+  try { recognition.stop(); } catch(_){}
+}
+
+function toggleMic() {
+  if (!recognition) return;
+  if (isSpeaking) stopSpeaking();
+  if (isRecording) { setStatus(''); stopRecognition(); }
+  else { try { recognition.start(); } catch(e){ setStatus('マイク起動失敗: ' + e.message); } }
+}
+
+// ─── Keyboard ─────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && document.activeElement !== inputField && recognition && !micBtn.disabled) {
+    e.preventDefault(); toggleMic();
+  }
+  if (e.code === 'Enter' && document.activeElement === inputField) {
+    e.preventDefault(); sendFromInput();
+  }
+});
+apiKeyInput.addEventListener('keydown', e => { if (e.code === 'Enter') saveApiKey(); });
+
+// ─── Toast ────────────────────────────────────────────────────
+function showToast(msg, type = '', ms = 4000) {
+  toast.textContent = msg;
+  toast.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { toast.className = ''; }, ms);
+}
+
+// ─── Init ─────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  // Load knowledge base from JSON
+  await loadKnowledge();
+
+  // Check API key
+  if (!getApiKey()) {
+    openApiKeyModal();
+    appendMessage('assistant',
+      'はじめまして！保険営業サポートAIです。\n' +
+      'まず右上の設定からAPIキーを入力してください。\n' +
+      'キーはこのブラウザにのみ保存され、外部には送信されません。'
+    );
+  } else {
+    enableUI();
+    appendMessage('assistant',
+      'こんにちは！保険営業サポートAIです。\n' +
+      'がん保険・先進医療特約・医療保険・生命保険に関するご質問に音声でもテキストでもお答えします。\n' +
+      '例：「がん保険の待機期間を教えてください」「先進医療特約の保険料はいくらですか？」'
+    );
+  }
+});
+</script>
+</body>
+</html>

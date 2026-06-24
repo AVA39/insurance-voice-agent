@@ -1,0 +1,40 @@
+name: 保険知識ベース 自動更新
+
+on:
+  schedule:
+    - cron: '0 15 * * *'   # 毎日 00:00 JST（= UTC 15:00）
+  workflow_dispatch:         # GitHub の画面から手動実行も可能
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # JSON ファイルをコミットするために必要
+
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 依存パッケージをインストール
+        run: pip install anthropic duckduckgo-search
+
+      - name: 知識ベースを更新
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/update_knowledge.py
+
+      - name: 変更があればコミット & プッシュ
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name  "github-actions[bot]"
+          git add knowledge/insurance_faq.json
+          git diff --staged --quiet \
+            && echo "変更なし — コミットをスキップします" \
+            || git commit -m "chore: 保険知識ベース自動更新 $(date '+%Y-%m-%d')"
+          git diff origin/main..HEAD --quiet || git push
