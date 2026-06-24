@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-GitHub Actions から実行される知識ベース更新スクリプト。
+GitHub Actions から実行される知識ベース更新スクリプト（Gemini版）。
 
 実行方法:
-  ANTHROPIC_API_KEY=sk-ant-... python scripts/update_knowledge.py
+  GEMINI_API_KEY=AIzaSy... python scripts/update_knowledge.py
 """
 
 import json
 import os
 import re
 import sys
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
 KNOWLEDGE_PATH = Path(__file__).parent.parent / "knowledge" / "insurance_faq.json"
+GEMINI_MODEL   = "gemini-1.5-flash"
 
 SEARCH_QUERIES = [
     ("がん保険",          "がん保険 待機期間 免責 最新 2026"),
@@ -40,8 +42,7 @@ def collect_results() -> list[dict]:
     all_results = []
     for category, query in SEARCH_QUERIES:
         print(f"  検索: {query}")
-        hits = search_web(query, max_results=4)
-        for h in hits:
+        for h in search_web(query, max_results=4):
             if h.get("body"):
                 all_results.append({
                     "category": category,
@@ -49,11 +50,30 @@ def collect_results() -> list[dict]:
                     "snippet":  h.get("body", ""),
                     "url":      h.get("href", ""),
                 })
-    print(f"  合計 {len(all_results)} 件の検索結果を取得しました")
+    print(f"  合計 {len(all_results)} 件取得")
     return all_results
 
 
-def update_with_claude(client, results: list[dict], existing: dict, today: str) -> dict:
+def call_gemini(api_key: str, prompt: str, max_tokens: int = 8000) -> str:
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models"
+        f"/{GEMINI_MODEL}:generateContent?key={api_key}"
+    )
+    payload = json.dumps({
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.3},
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        url, data=payload, headers={"Content-Type": "application/json"}
+    )
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        data = json.loads(resp.read())
+
+    return data["candidates"][0]["content"]["parts"][0]["text"]
+
+
+def update_knowledge(api_key: str, results: list[dict], existing: dict, today: str) -> dict:
     context = "\n\n".join(
         f"[{r['category']}] {r['title']}\n{r['snippet']}\n出典: {r['url']}"
         for r in results if r["snippet"]
@@ -74,17 +94,11 @@ def update_with_claude(client, results: list[dict], existing: dict, today: str) 
 - 新しい重要な Q&A があれば追加（1 カテゴリ最大 8 問まで）
 - 確認できない情報は追加しない（ハルシネーション禁止）
 - "last_updated" を "{today}" に設定する
-- スキーマは絶対に変更しない（categories[].name と categories[].items[].id は変えない）
+- スキーマは変更しない（categories[].name と categories[].items[].id は変えない）
 - JSON のみ返答すること。説明文・```マーカーは不要"""
 
-    resp = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=8000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = resp.content[0].text.strip()
+    raw = call_gemini(api_key, prompt)
 
-    # markdown コードブロックを除去
     if "```" in raw:
         m = re.search(r"```(?:json)?\s*([\s\S]+?)```", raw)
         raw = m.group(1).strip() if m else raw
@@ -93,50 +107,40 @@ def update_with_claude(client, results: list[dict], existing: dict, today: str) 
 
 
 def validate(data: dict):
-    assert "categories" in data and isinstance(data["categories"], list), \
-        "'categories' が見つかりません"
+    assert "categories" in data and isinstance(data["categories"], list)
     for cat in data["categories"]:
-        assert "items" in cat and isinstance(cat["items"], list), \
-            f"カテゴリ '{cat.get('name')}' に items がありません"
+        assert "items" in cat and isinstance(cat["items"], list)
 
 
 def main():
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        print("ERROR: 環境変数 ANTHROPIC_API_KEY が設定されていません", file=sys.stderr)
+        print("ERROR: 環境変数 GEMINI_API_KEY が設定されていません", file=sys.stderr)
         sys.exit(1)
-
-    from anthropic import Anthropic
-    client = Anthropic(api_key=api_key)
 
     today = datetime.now().strftime("%Y-%m-%d")
     print(f"=== 保険知識ベース更新 ({today}) ===")
 
-    # 1. Web 検索
     print("\n[1] Web 検索中...")
     results = collect_results()
     if not results:
-        print("ERROR: 検索結果が 0 件でした。処理を中断します。", file=sys.stderr)
+        print("ERROR: 検索結果が 0 件でした", file=sys.stderr)
         sys.exit(1)
 
-    # 2. 既存 JSON 読み込み
     print("\n[2] 既存の知識ベースを読み込み中...")
     with open(KNOWLEDGE_PATH, encoding="utf-8") as f:
         existing = json.load(f)
     total_before = sum(len(c.get("items", [])) for c in existing["categories"])
     print(f"  現在: {len(existing['categories'])} カテゴリ / {total_before} 問")
 
-    # 3. Anthropic で更新
-    print("\n[3] AI で知識ベースを更新中...")
-    updated = update_with_claude(client, results, existing, today)
+    print("\n[3] Gemini で知識ベースを更新中...")
+    updated = update_knowledge(api_key, results, existing, today)
 
-    # 4. 検証
     print("\n[4] スキーマ検証中...")
     validate(updated)
     total_after = sum(len(c.get("items", [])) for c in updated["categories"])
     print(f"  更新後: {len(updated['categories'])} カテゴリ / {total_after} 問")
 
-    # 5. バックアップ → 保存
     backup = KNOWLEDGE_PATH.with_suffix(".json.bak")
     backup.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
 

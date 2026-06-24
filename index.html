@@ -170,10 +170,10 @@
 <div class="modal-overlay" id="apiKeyModal">
   <div class="modal">
     <h2>🔑 APIキーを設定してください</h2>
-    <p>Anthropic の API キーを入力してください。キーはこのブラウザにのみ保存され、外部に送信されません。</p>
-    <input type="password" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="off" />
+    <p>Google Gemini の API キーを入力してください（無料）。キーはこのブラウザにのみ保存され、外部に送信されません。</p>
+    <input type="password" id="apiKeyInput" placeholder="AIzaSy... または AQ.Ab8..." autocomplete="off" />
     <div class="modal-link">
-      APIキーの取得: <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → API Keys
+      APIキーの取得（無料）: <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a> → Get API key
     </div>
     <div class="modal-actions">
       <button class="modal-btn modal-btn-primary" onclick="saveApiKey()">保存して開始</button>
@@ -214,9 +214,8 @@
 
 <script>
 // ─── Constants ────────────────────────────────────────────────
-const STORAGE_KEY   = 'avantis_anthropic_key';
-const MODEL         = 'claude-sonnet-4-6';
-const MAX_TOKENS    = 300;
+const STORAGE_KEY   = 'avantis_gemini_key';
+const GEMINI_MODEL  = 'gemini-1.5-flash';
 const MAX_HISTORY   = 10;
 const KNOWLEDGE_URL = 'knowledge/insurance_faq.json';
 
@@ -245,8 +244,8 @@ function getApiKey() { return localStorage.getItem(STORAGE_KEY) || ''; }
 
 function saveApiKey() {
   const key = apiKeyInput.value.trim();
-  if (!key.startsWith('sk-ant-')) {
-    showToast('⚠️ APIキーは sk-ant- で始まります', 'err');
+  if (!key) {
+    showToast('⚠️ APIキーを入力してください', 'err');
     return;
   }
   localStorage.setItem(STORAGE_KEY, key);
@@ -310,35 +309,39 @@ ${faq}
 
 const FALLBACK_PROMPT = `あなたは保険営業担当者をサポートする AI アシスタントです。保険に関する質問に 3 文以内で簡潔に回答してください。`;
 
-// ─── Anthropic API ────────────────────────────────────────────
-async function callClaude(messages) {
+// ─── Gemini API ───────────────────────────────────────────────
+async function callGemini(messages) {
   const key = getApiKey();
   if (!key) throw new Error('APIキーが設定されていません');
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-allow-browser': 'true',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      system: systemPrompt,
-      messages,
-    }),
-  });
+  // Gemini は 'assistant' でなく 'model' を使う
+  const contents = messages.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: { maxOutputTokens: 300, temperature: 0.7 },
+      }),
+    }
+  );
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    if (res.status === 401) throw new Error('APIキーが無効です。⚙️ 設定から確認してください。');
+    if (res.status === 400 || res.status === 403)
+      throw new Error('APIキーが無効です。⚙️ 設定から確認してください。');
     throw new Error(err.error?.message || `API エラー (${res.status})`);
   }
 
   const data = await res.json();
-  return data.content[0].text;
+  return data.candidates[0].content.parts[0].text;
 }
 
 // ─── Chat logic ───────────────────────────────────────────────
@@ -388,7 +391,7 @@ async function sendMessage(text) {
   showTyping();
 
   try {
-    const reply = await callClaude(conversationHistory);
+    const reply = await callGemini(conversationHistory);
     removeTyping();
     appendMessage('assistant', reply);
     conversationHistory.push({ role: 'assistant', content: reply });
