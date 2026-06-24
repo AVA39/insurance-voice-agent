@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 KNOWLEDGE_PATH = Path(__file__).parent.parent / "knowledge" / "insurance_faq.json"
-GEMINI_MODEL   = "gemini-1.5-flash"
+GEMINI_MODEL   = "gemini-2.0-flash"
 
 SEARCH_QUERIES = [
     ("がん保険",          "がん保険 待機期間 免責 最新 2026"),
