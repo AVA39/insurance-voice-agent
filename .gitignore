@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+knowledge/insurance_faq.json.bak
+*.bak
